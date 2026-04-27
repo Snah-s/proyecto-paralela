@@ -2,7 +2,7 @@
 
 Implementación y análisis de rendimiento de K-Nearest Neighbors (KNN) paralelizado con MPI sobre el dataset `load_digits` de scikit-learn.
 
----
+
 
 ## Descripción
 
@@ -10,7 +10,7 @@ Este proyecto tiene como objetivo transformar una versión secuencial del algori
 
 Se trabaja sobre el dataset clásico de reconocimiento de dígitos manuscritos incluido en `scikit-learn`.
 
----
+
 
 ## Tecnologías utilizadas
 
@@ -23,7 +23,7 @@ Se trabaja sobre el dataset clásico de reconocimiento de dígitos manuscritos i
 - mpi4py
 - Conda / Micromamba / venv
 
----
+
 
 # Instalación de dependencias
 
@@ -33,7 +33,7 @@ El proyecto soporta tres formas de instalación:
 - Conda
 - Entorno virtual estándar (`venv`)
 
----
+
 
 # Opción 1: Micromamba (Recomendado)
 
@@ -59,7 +59,7 @@ micromamba env create -f environment.yml
 micromamba activate knn-mpi
 ```
 
----
+
 
 # Opción 2: Conda
 
@@ -75,7 +75,7 @@ conda env create -f environment.yml
 conda activate knn-mpi
 ```
 
----
+
 
 # Opción 3: venv + pip
 
