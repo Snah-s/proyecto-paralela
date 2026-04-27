@@ -2,7 +2,7 @@
 
 Implementación y análisis de rendimiento de K-Nearest Neighbors (KNN) paralelizado con MPI sobre el dataset `load_digits` de scikit-learn.
 
-
+hola
 
 ## Descripción
 
