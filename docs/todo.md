@@ -6,13 +6,6 @@ Transformaremos una implementación secuencial del algoritmo **K-Nearest Neighbo
 
 No se busca únicamente clasificar datos, sino **analizar rendimiento computacional**, eficiencia paralela y escalabilidad.
 
-Este trabajo pertenece al área de:
-
-* Computación Paralela
-* High Performance Computing (HPC)
-* Optimización de algoritmos
-* Benchmarking científico
-
 ## Contexto
 
 Se parte del dataset `load_digits()` de `scikit-learn`, el cual contiene imágenes de dígitos manuscritos de tamaño 8x8.
