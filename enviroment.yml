@@ -1,0 +1,14 @@
+name: knn-mpi
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - matplotlib
+  - pandas
+  - scikit-learn
+  - mpi4py
+  - openmpi
+  - pip
+  - pip:
+      - tqdm
