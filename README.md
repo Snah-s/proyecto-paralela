@@ -10,10 +10,10 @@
 **Paralelización del algoritmo K-Nearest Neighbors (KNN) usando MPI para clasificar el dataset `load_digits` de scikit-learn.**  
 Proyecto del curso *Computación Paralela y Distribuida* — Facultad de Computación
 
-| Integrante | Departamento |
+| Alumno | Participación |
 |---|---|
-| Ricardo Amiel Acuña Villogas | Data Science |
-| Camilo Ernesto Soto Cristobal | Data Science |
+| Ricardo Amiel Acuña Villogas | 100% |
+| Camilo Ernesto Soto Cristobal | 100% |
 
 </div>
 
