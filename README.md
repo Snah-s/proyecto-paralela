@@ -1,14 +1,15 @@
-# KNN Paralelo con MPI — Clasificación de Dígitos
+# KNN Paralelo con MPI y OpenMP — Clasificación de Dígitos
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
-![MPI](https://img.shields.io/badge/Open%20MPI-5.0-orange?logo=linux)
-![mpi4py](https://img.shields.io/badge/mpi4py-4.x-green)
+![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)
+![MPI](https://img.shields.io/badge/Open%20MPI-4.1-orange?logo=linux)
+![mpi4py](https://img.shields.io/badge/mpi4py-3.1-green)
+![numba](https://img.shields.io/badge/numba-0.66-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
-**Paralelización del algoritmo K-Nearest Neighbors (KNN) usando MPI para clasificar el dataset `load_digits` de scikit-learn.**  
-Proyecto del curso *Computación Paralela y Distribuida* — Facultad de Computación
+**Paralelización del algoritmo K-Nearest Neighbors (KNN) con MPI (memoria distribuida) y numba/OpenMP (memoria compartida) sobre el dataset `load_digits` de scikit-learn.**
+Proyecto del curso *Computación Paralela y Distribuida* — UTEC
 
 | Alumno | Participación |
 |---|---|
@@ -23,359 +24,219 @@ Proyecto del curso *Computación Paralela y Distribuida* — Facultad de Computa
 
 - [Descripción](#-descripción)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
-- [Requisitos](#-requisitos)
-- [Instalación](#-instalación)
+- [Requisitos e Instalación](#-requisitos-e-instalación)
 - [Uso](#-uso)
-- [Versiones Paralelas](#-versiones-paralelas)
+- [Diseño: una implementación, tres etapas](#-diseño-una-implementación-tres-etapas)
 - [Resultados](#-resultados)
-- [Análisis](#-análisis)
+- [Documentación](#-documentación)
 
 ---
 
 ## 📖 Descripción
 
-Este proyecto tiene como objetivo transformar una versión secuencial del algoritmo KNN en una implementación paralela usando `mpi4py`, evaluando rendimiento computacional, speedup, escalabilidad, tiempos de comunicación y precisión del modelo.
-
-Se trabaja sobre el dataset clásico de reconocimiento de dígitos manuscritos incluido en `scikit-learn`.
-
-Se implementaron **3 versiones progresivas** del algoritmo KNN en paralelo con el paradigma **PRAM CREW** (Concurrent Read, Exclusive Write) usando MPI:
+Se transforma la versión secuencial de KNN (`src/knn_digits_sec.py`) en implementaciones
+paralelas, evaluando **speedup, escalabilidad, tiempos de comunicación, FLOP/s y precisión**.
+El diseño sigue el paradigma **PRAM CREW** (Concurrent Read, Exclusive Write): todos los
+procesos leen `X_train` (solo lectura), y cada proceso escribe su partición disjunta de `y_pred`.
 
 ```
 Raíz carga datos
      │
-     ├── bcast(X_train, y_train) ──→ todos los procesos
+     ├── bcast(X_train, y_train) ──→ todos los procesos   (Lectura Concurrente)
      │
      ├── scatter(X_test) ──→ fracción local a cada proceso
      │                         │
      │              ┌──────────┴──────────┐
-     │           P0: KNN      P1: KNN  ...  Pk: KNN   ← cómputo independiente
+     │           P0: KNN      P1: KNN  ...  Pk: KNN        (Escritura Exclusiva)
      │              └──────────┬──────────┘
      └── gather(y_pred) ←──────┘
 ```
 
-Cada versión optimiza una dimensión distinta:
+**Se paraleliza la fase de TEST, no la de TRAIN** — KNN es un *lazy learner* y todo el
+cómputo está en la inferencia.
 
-| Versión | Distancia | Comunicación | Mejora principal |
-|---------|-----------|--------------|-----------------|
-| **V1** | Loop Python (`for x in X_train`) | `bcast` + `scatter` + `gather` pickle | Baseline paralelo |
-| **V2** | Matricial NumPy broadcasting + `argpartition` | `bcast` + `scatter` + `gather` pickle | Cómputo ×6 más rápido |
-| **V3** | Igual a V2 | `Bcast`/`Scatterv`/`Gatherv` buffers MPI | Sin serialización pickle |
+Además de MPI, se implementa una versión de **memoria compartida** (numba `prange` → hilos
+OpenMP reales) para comparar paradigmas empíricamente.
 
 ---
-
-## Tecnologías utilizadas
-
-- Python 3.11+
-- NumPy
-- Scikit-learn
-- Matplotlib
-- Pandas
-- MPI / OpenMPI
-- mpi4py
-- Conda / Micromamba / venv
-
-
-
-# Instalación de dependencias
-
-El proyecto soporta tres formas de instalación:
-
-- Micromamba (recomendado)
-- Conda
-- Entorno virtual estándar (`venv`)
-
-
-
-# Opción 1: Micromamba (Recomendado)
-
-## Instalar micromamba
-
-Si no lo tienes instalado:
-
-```bash
-curl -Ls https://micro.mamba.pm/install.sh | bash
-````
-
-Reinicia terminal o recarga shell.
-
-## Crear entorno
-
-```bash
-micromamba env create -f environment.yml
-```
-
-## Activar entorno
-
-```bash
-micromamba activate knn-mpi
-```
-
-
-
-# Opción 2: Conda
-
-## Crear entorno
-
-```bash
-conda env create -f environment.yml
-```
-
-## Activar entorno
-
-```bash
-conda activate knn-mpi
-```
-
-
-
-# Opción 3: venv + pip
-
-## Linux / macOS
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Windows
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-
-# Dependencia adicional para MPI (solo venv)
-
-Si usas `venv`, necesitas instalar MPI manualmente.
-
-## Ubuntu / Debian
-
-```bash
-sudo apt update
-sudo apt install openmpi-bin libopenmpi-dev
-```
-
-## Arch Linux
-
-```bash
-sudo pacman -S openmpi
-```
 
 ## 🗂 Estructura del Proyecto
 
 ```
 proyecto-paralela/
 ├── src/
-│   ├── knn_data_generate.py        # Genera datasets escalados (5k–20k)
-│   ├── knn_paralelo_v1.py          # V1: loop Python + pickle MPI
-│   ├── knn_paralelo_v2.py          # V2: NumPy vectorizado + pickle MPI
-│   ├── knn_paralelo_v3.py          # V3: NumPy vectorizado + buffer MPI
-│   ├── run_experiments.sh          # Script de experimentos (con resume)
-│   ├── results_knn_v1.csv          # Resultados V1 (generado)
-│   ├── results_knn_v2.csv          # Resultados V2 (generado)
-│   ├── results_knn_v3.csv          # Resultados V3 (generado)
-│   └── data/                       # Datasets .npz generados
-│       ├── digits_n1797.npz
-│       ├── digits_n5000.npz
-│       ├── digits_n10000.npz
-│       ├── digits_n15000.npz
-│       └── digits_n20000.npz
-├── experimental_analysis_v2.ipynb  # Notebook de análisis y gráficas
+│   ├── knn_digits_sec.py         # Secuencial base (referencia)
+│   ├── knn_data_generate.py      # Genera datasets escalados 1797–20000 (.npz)
+│   ├── knn_paralelo.py           # MPI — 1 código, 3 etapas (STAGE=loop|vec|buf)
+│   ├── knn_omp.py                # Memoria compartida (numba prange / OpenMP)
+│   ├── make_figures.py           # Genera las figuras vectorizadas del informe
+│   ├── experimental_analysis.ipynb  # Notebook de análisis (mismas figuras)
+│   ├── run_experiments.sh        # Sweep MPI + OMP (resume + oversubscribe)
+│   ├── results_mpi.csv           # Resultados MPI  (generado, 300 filas)
+│   ├── results_omp.csv           # Resultados OMP  (generado, 100 filas)
+│   ├── data/                     # Datasets .npz (generado)
+│   └── partial_project_version/  # Código archivado del proyecto parcial
+├── Proyecto_Final_Paralela/      # Informe final IEEE (main.tex, referencias.bib, figures/)
 └── README.md
 ```
 
 ---
 
-## ⚙️ Requisitos
+## ⚙️ Requisitos e Instalación
 
-### Hardware
-| Recurso | Mínimo | Usado en experimentos |
-|---------|--------|----------------------|
-| Núcleos físicos | 2 | **12 núcleos físicos** |
-| Hilos lógicos | 4 | **24 hilos (Hyperthreading)** |
-| RAM | 4 GB | 32 GB |
+### Hardware de los experimentos
+
+| Recurso | Valor |
+|---|---|
+| CPU | Intel i7-1165G7 — **4 núcleos físicos / 8 hilos (Hyper-Threading)** |
+| RAM | 16 GB |
+| MPI | Open MPI 4.1.6 |
+
+> Este hardware coincide con el escenario "4 procesadores / 8 hilos" del enunciado, lo que
+> permite responder empíricamente el efecto del Hyper-Threading en el speedup.
 
 ### Software
+
 ```
-Python      >= 3.11
-Open MPI    >= 5.0        ← importante: debe ser Open MPI, no MPICH
-mpi4py      >= 3.1
-numpy       >= 1.24
-scikit-learn >= 1.3
-scipy       >= 1.10
+Python >= 3.11 · Open MPI >= 4.1 · mpi4py · numpy · scikit-learn · scipy · numba · pandas · matplotlib
 ```
 
-> ⚠️ **Advertencia**: `mpi4py` debe estar compilado con la misma implementación MPI que usas para lanzar (`mpirun`). Si tu sistema tiene MPICH instalado, usa `$CONDA_PREFIX/bin/mpirun` para garantizar la compatibilidad con Open MPI de conda.
+### Opción A — conda / micromamba (según `environment.yml`)
+
+```bash
+micromamba env create -f environment.yml   # o: conda env create -f environment.yml
+micromamba activate knn-mpi                 # o: conda activate knn-mpi
+pip install numba                           # (numba se usa en la versión OMP)
+```
+
+### Opción B — venv reutilizando el Open MPI del sistema (probado)
+
+```bash
+sudo apt install openmpi-bin libopenmpi-dev          # Ubuntu/Debian
+python3 -m venv --system-site-packages .venv          # reutiliza mpi4py del sistema si existe
+source .venv/bin/activate
+pip install scikit-learn pandas matplotlib numba
+```
+
+> ⚠️ `mpi4py` debe estar compilado con el mismo MPI que usa `mpirun`. Verifica:
+> ```bash
+> python -c "from mpi4py import MPI; print(MPI.Get_library_version()[:50])"
+> mpirun --version
+> ```
 
 ---
 
-## 🔧 Instalación
+## 🚀 Uso
 
-### 1. Clonar el repositorio
-```bash
-git clone https://github.com/<usuario>/proyecto-paralela.git
-cd proyecto-paralela
-```
-
-### 2. Crear entorno conda
-```bash
-conda env create -f environment.yml
-conda activate knn-mpi
-```
-
-### 3. Verificar que mpirun es Open MPI
-```bash
-# Debe mostrar "Open MPI", NO "HYDRA"
-$CONDA_PREFIX/bin/mpirun --version
-
-# Verificar que mpi4py usa el mismo
-python -c "from mpi4py import MPI; print(MPI.Get_library_version()[:50])"
-```
-
----
-
-## Uso
-
-### Paso 1 — Generar los datasets
+### 1. Generar los datasets
 
 ```bash
-python src/knn_data_generate.py
+python src/knn_data_generate.py     # crea src/data/digits_n{1797,5000,10000,15000,20000}.npz
 ```
 
-Esto genera en `src/data/` los archivos `.npz` para n ∈ {1797, 5000, 10000, 15000, 20000}.  
-Cada dataset escala el original con **ruido gaussiano progresivo** por ronda (sin data leakage).
-
-```
- n_target │      X_train │       X_test │    dtype │      rango X │ clases
-─────────────────────────────────────────────────────────────────────────
-    1797  │  (1437, 64)  │   (360, 64)  │  float64 │ [ 0.00, 16.00] │     10
-    5000  │  (4000, 64)  │  (1000, 64)  │  float64 │ [ 0.00, 16.00] │     10
-   10000  │  (8000, 64)  │  (2000, 64)  │  float64 │ [ 0.00, 16.00] │     10
-   15000  │ (12000, 64)  │  (3000, 64)  │  float64 │ [ 0.00, 16.00] │     10
-   20000  │ (16000, 64)  │  (4000, 64)  │  float64 │ [ 0.00, 16.00] │     10
-```
-
-### Paso 2 — Ejecutar una versión manualmente
+### 2. Ejecutar una etapa manualmente
 
 ```bash
-# V1 con p=4 procesos, dataset n=5000, iteración 1
-IT=1 DATA_SIZE=5000 $CONDA_PREFIX/bin/mpirun -n 4 python src/knn_paralelo_v1.py
+# MPI, etapa 'buf', n=5000, p=4
+STAGE=buf DATA_SIZE=5000 IT=1 mpirun -n 4 python src/knn_paralelo.py
 
-# V3 con p=8 (requiere --oversubscribe en máquinas de 4 núcleos)
-IT=1 DATA_SIZE=20000 $CONDA_PREFIX/bin/mpirun --oversubscribe -n 8 python src/knn_paralelo_v3.py
+# p=8 requiere --oversubscribe (solo hay 4 núcleos físicos)
+STAGE=buf DATA_SIZE=20000 IT=1 mpirun --oversubscribe -n 8 python src/knn_paralelo.py
+
+# Memoria compartida (OMP), 4 hilos
+THREADS=4 DATA_SIZE=20000 IT=1 python src/knn_omp.py
 ```
 
-### Paso 3 — Correr experimentos completos
+Variables: `STAGE ∈ {loop, vec, buf}`, `DATA_SIZE ∈ {1797,5000,10000,15000,20000}`, `THREADS` (OMP), `IT` (nº de iteración).
+
+### 3. Sweep completo de experimentos
 
 ```bash
 chmod +x src/run_experiments.sh
-
-# Solo n=1797 (rápido, para prueba)
-./src/run_experiments.sh
-
-# Todos los tamaños (n ∈ {1797, 5000, 10000, 15000, 20000})
-ALL_SIZES=1 ./src/run_experiments.sh
-
-# Solo una versión
-VERSION=v1 ALL_SIZES=1 ./src/run_experiments.sh
-
-# Re-correr todo ignorando resultados previos
-FORCE=1 ALL_SIZES=1 ./src/run_experiments.sh
+./src/run_experiments.sh              # MPI (3 etapas) + OMP, todos los p y n, 5 iters
+ONLY=omp ./src/run_experiments.sh     # solo OMP     (o ONLY=mpi)
+FORCE=1  ./src/run_experiments.sh     # re-corre todo (ignora resume)
 ```
 
-> **Resume automático**: si interrumpes con `Ctrl+C`, al re-ejecutar el script detecta qué filas ya están en el CSV y retoma exactamente donde se quedó.
+Genera `src/results_mpi.csv` (300 filas) y `src/results_omp.csv` (100 filas).
+**Resume automático**: al re-ejecutar, omite las combinaciones ya presentes en el CSV.
 
-El script genera:
-```
-src/results_knn_v1.csv   ← 100 filas (5 its × 4 p × 5 n)
-src/results_knn_v2.csv   ← 100 filas
-src/results_knn_v3.csv   ← 100 filas
-```
-
-### Paso 4 — Analizar resultados
+### 4. Generar figuras / analizar
 
 ```bash
-jupyter notebook experimental_analysis_v2.ipynb
+python src/make_figures.py                          # → Proyecto_Final_Paralela/figures/*.pdf
+# o de forma interactiva:
+jupyter notebook src/experimental_analysis.ipynb
 ```
 
 ---
 
-## 🔄 Versiones Paralelas
+## 🔄 Diseño: una implementación, tres etapas
 
-### FLOPs por distancia euclidiana
-```
-FLOPs(d=64) = 3·d + 1 = 193  por cada par (x_test, x_train)
-FLOPs_total = n_test × n_train × 193
-```
+Un solo programa (`knn_paralelo.py`) con el comportamiento seleccionable por `STAGE`
+(registra el desarrollo incremental que pide el enunciado):
 
-### V1 — Baseline paralelo
-- **Distancia**: loop Python `for x in X_train`
-- **Comunicación**: `comm.bcast` + `comm.scatter` + `comm.gather` (serialización pickle)
-- **Complejidad comunicación**: O(n_train · d · p) por el bcast a todos
+| Etapa | Distancia | Comunicación | Nota |
+|---|---|---|---|
+| **loop** | Por punto con NumPy | `bcast`/`scatter`/`gather` (pickle) | Baseline directo |
+| **vec** | Matricial 3-D **por lotes** + `argpartition` | pickle | Acota memoria (evita el tensor de ~32 GB en n=20000) |
+| **buf** | Igual a `vec` | `Bcast`/`Scatterv`/`Gatherv` (buffers) | Sin serialización pickle |
 
-### V2 — Cómputo vectorizado
-- **Distancia**: `D = sqrt(((local_X[:,None,:] - X_train[None,:,:])**2).sum(2))`  
-  Una sola operación NumPy: shape `(local_n, n_train)`
-- **Votación**: `np.argpartition` O(n) vs argsort O(n log n)
-- **Comunicación**: igual que V1
+**FLOPs por distancia euclidiana:** `3·d = 192` (d restas + d mult. + (d−1) sumas + 1 raíz),
+`FLOPs_total = n_test · n_train · 3d`.
 
-### V3 — Comunicación por buffers MPI
-- **Distancia**: igual que V2
-- **Comunicación**: `Bcast` (mayúscula) + `Scatterv` + `Gatherv`  
-  Transmite buffers NumPy directamente sin pickle → menor overhead para datasets grandes
+**Modelo de comunicación (α–β, árbol binomial):** `T_comm = Θ(log p · (α + β·m))` — el factor
+`log p` es el número de rondas de la colectiva, no una constante ni `(p−1)`.
 
 ---
 
 ## 📊 Resultados
 
-Experimentos ejecutados en computadora de laboratorio: **12 núcleos físicos / 24 hilos lógicos**, Open MPI 5.0, 5 iteraciones por combinación `(p, n)`.
+Máquina **4c/8t** · Open MPI 4.1.6 · 5 iteraciones por `(etapa, p, n)` · agregación por **mediana**
+(robusta al *thermal throttling* del portátil). `p=8` está **oversuscrito** (8 procesos / 4 núcleos).
 
-### Tabla resumen — V1 (n=1797, k=3)
+### Speedup y eficiencia — etapa `buf`
 
-| p | T_total (ms) | T_comm (ms) | T_compute (ms) | Speedup S | Eficiencia E | Granularidad G | GFLOP/s |
-|---|---|---|---|---|---|---|---|
-| 2⁰=1 | 686.02 | 0.93 | 685.09 | 1.000 | 1.000 | 739.2 | 0.146 |
-| 2¹=2 | 349.28 | 1.89 | 347.40 | 1.964 | 0.982 | 184.3 | 0.287 |
-| 2²=4 | 179.33 | 3.83 | 175.50 | 3.826 | 0.956 | 45.8 | 0.569 |
-| 2³=8 | 94.41 | 4.63 | 89.78 | 7.266 | 0.908 | 19.4 | 1.113 |
+| n | S(2) | E(2) | S(4) | E(4) | S(8) |
+|---|---|---|---|---|---|
+| 1,797 | 1.96 | 0.98 | 3.21 | 0.80 | 1.53 |
+| 10,000 | 1.94 | 0.97 | 2.88 | 0.72 | 3.35 |
+| 15,000 | 2.19 | 1.09 | 3.32 | 0.83 | **3.81** |
+| 20,000 | 1.73 | 0.86 | 2.35 | 0.59 | 2.70 |
 
-### Ley de Amdahl — fracción paralela f
+> El speedup **satura cerca de p=4** (núcleos físicos). Más allá, el Hyper-Threading y la
+> oversubscripción aportan poco: KNN es *compute-bound*. Óptimo estimado **p\* ≈ 5.4**
+> (modelo `T = a/p + b·p`, con a=25.2 s, b=0.87 s).
 
-| n | f ajustado | Límite S(∞) | S(p=4) | E(p=4) |
-|---|---|---|---|---|
-| 1,797 | 0.9855 | 69.1× | 3.825 | 0.956 |
-| 5,000 | 0.9897 | 97.2× | 3.796 | 0.949 |
-| 10,000 | 0.9886 | 87.6× | 3.768 | 0.942 |
-| 15,000 | 0.9823 | 56.4× | 3.696 | 0.924 |
-| 20,000 | 0.9851 | 67.3× | 3.759 | 0.940 |
+### MPI vs OMP — tiempo de cómputo a p=4
 
-### p* óptimo teórico (modelo T = α/p + β·p)
+| n | MPI `buf` (s) | OMP numba (s) | Aceleración |
+|---|---|---|---|
+| 1,797 | 0.093 | 0.0024 | **38.8×** |
+| 10,000 | 3.072 | 0.0776 | **39.6×** |
+| 20,000 | 10.921 | 0.3642 | **30.0×** |
 
-Para n=20,000: **α = 85.90 s**, **β = 0.176 s** → **p\* = √(α/β) ≈ 22**
+> En un solo nodo, la **memoria compartida (OMP) es 30–40× más rápida** que MPI: evita la
+> réplica de `X_train`, la serialización y la latencia `log p`. Pico: **46–67 GFLOP/s** (OMP)
+> vs ~1.3 GFLOP/s (MPI). MPI se justifica por su escalado a **múltiples nodos**.
 
-> El cómputo domina ampliamente (G > 40 en todos los casos), lo que indica que añadir más procesos es beneficioso hasta p≈22 para el dataset más grande.
+### Precisión (invariante en p)
 
-### Accuracy (constante en todos los p)
 ```
-Accuracy = 0.9861  (independiente de p — resultado correcto)
+n=1797 → 0.9861 · n=5000 → 0.9960 · n≥10000 → 1.0000     (varía con n por la augmentación, NO con p)
 ```
+
+La invarianza en `p` valida que la paralelización es matemáticamente equivalente al secuencial.
+
+### Escalabilidad (dos vías)
+
+- **Brent** (sin comunicación): `n ∝ √p`
+- **Isoeficiencia** (con comunicación `log p`): `n ∝ p·log p`
 
 ---
 
-## 📈 Análisis
+## 📚 Documentación
 
-El notebook `experimental_analysis_v2.ipynb` genera automáticamente:
-
-| Figura | Descripción |
-|--------|-------------|
-| `fig_speedup_eficiencia.pdf` | Speedup y eficiencia — una línea por n |
-| `fig_t_total_vs_p.pdf` | Tiempo total vs p — hue = n |
-| `fig_crossover_popt.pdf` | Ajuste T_compute/T_comm/T_total + p* |
-| `fig_comm_breakdown.pdf` | T_compute vs T_comm + desglose Bcast/Scatter/Gather |
-| `fig_flops_vs_p.pdf` | GFLOP/s vs p — hue = n |
-| `fig_escalabilidad.pdf` | t_compute vs n + speedup vs n |
-| `fig_amdahl.pdf` | Ley de Amdahl con ajuste por n |
-| `tabla_resumen.pdf` | Tabla completa de métricas |
+| Documento | Contenido |
+|---|---|
+| `Proyecto_Final_Paralela/main.tex` | Informe final IEEE |
