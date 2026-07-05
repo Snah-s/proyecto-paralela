@@ -26,9 +26,10 @@ P_LIST=(1 2 4 8)
 N_LIST=(1797 5000 10000 15000 20000)
 STAGES=(loop vec buf)
 FORCE="${FORCE:-0}"
-ONLY="${ONLY:-all}"             # all | mpi | omp
+ONLY="${ONLY:-all}"             # all | mpi | omp | train
 CSV_MPI="src/results_mpi.csv"
 CSV_OMP="src/results_omp.csv"
+CSV_TRAIN="src/results_train.csv"
 
 # núcleos físicos → slots de OpenMPI (para decidir --oversubscribe)
 N_PHYS=$(lscpu | awk -F: '/^Core\(s\) per socket:/{c=$2} /^Socket\(s\):/{s=$2} END{print (c+0)*(s+0)}')
@@ -71,6 +72,24 @@ if [[ "$ONLY" == "all" || "$ONLY" == "mpi" ]]; then
   done
 fi
 
+# ── MPI TRAIN-parallel (estrategia rival: particiona el train) ───────────────
+if [[ "$ONLY" == "all" || "$ONLY" == "train" ]]; then
+  for n in "${N_LIST[@]}"; do
+    for p in "${P_LIST[@]}"; do
+      over=""; (( p > N_PHYS )) && over="--oversubscribe"
+      for it in $(seq 1 "$ITERS"); do
+        if row_exists "$CSV_TRAIN" "mpi" "train" "$it" "$n" "$p"; then
+          echo "  skip  mpi/train n=$n p=$p it=$it"
+        else
+          DATA_SIZE=$n IT=$it PYTHONWARNINGS="ignore" \
+            $MPIRUN $over -n "$p" "$PYTHON" src/knn_train_parallel.py \
+            || { echo "  ✗ FALLO mpi/train n=$n p=$p it=$it"; }
+        fi
+      done
+    done
+  done
+fi
+
 # ── OMP (numba) ──────────────────────────────────────────────────────────────
 if [[ "$ONLY" == "all" || "$ONLY" == "omp" ]]; then
   for n in "${N_LIST[@]}"; do
@@ -91,5 +110,6 @@ fi
 t1=$(date +%s)
 echo "────────────────────────────────────────────────────"
 echo "  Terminado en $(( (t1-t0)/60 ))m $(( (t1-t0)%60 ))s"
-[[ -f "$CSV_MPI" ]] && echo "  $CSV_MPI : $(( $(wc -l < "$CSV_MPI") - 1 )) filas"
-[[ -f "$CSV_OMP" ]] && echo "  $CSV_OMP : $(( $(wc -l < "$CSV_OMP") - 1 )) filas"
+[[ -f "$CSV_MPI"   ]] && echo "  $CSV_MPI   : $(( $(wc -l < "$CSV_MPI")   - 1 )) filas"
+[[ -f "$CSV_TRAIN" ]] && echo "  $CSV_TRAIN : $(( $(wc -l < "$CSV_TRAIN") - 1 )) filas"
+[[ -f "$CSV_OMP"   ]] && echo "  $CSV_OMP   : $(( $(wc -l < "$CSV_OMP")   - 1 )) filas"

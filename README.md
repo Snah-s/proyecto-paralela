@@ -67,12 +67,14 @@ proyecto-paralela/
 ├── src/
 │   ├── knn_digits_sec.py         # Secuencial base (referencia)
 │   ├── knn_data_generate.py      # Genera datasets escalados 1797–20000 (.npz)
-│   ├── knn_paralelo.py           # MPI — 1 código, 3 etapas (STAGE=loop|vec|buf)
+│   ├── knn_paralelo.py           # MPI TEST-paralelo — 1 código, 3 etapas (STAGE=loop|vec|buf)
+│   ├── knn_train_parallel.py     # MPI TRAIN-paralelo — estrategia rival (prueba TEST > TRAIN)
 │   ├── knn_omp.py                # Memoria compartida (numba prange / OpenMP)
 │   ├── make_figures.py           # Genera las figuras vectorizadas del informe
 │   ├── experimental_analysis.ipynb  # Notebook de análisis (mismas figuras)
 │   ├── run_experiments.sh        # Sweep MPI + OMP (resume + oversubscribe)
-│   ├── results_mpi.csv           # Resultados MPI  (generado, 300 filas)
+│   ├── results_mpi.csv           # Resultados MPI TEST-paralelo (generado, 300 filas)
+│   ├── results_train.csv         # Resultados MPI TRAIN-paralelo (generado, 100 filas)
 │   ├── results_omp.csv           # Resultados OMP  (generado, 100 filas)
 │   ├── data/                     # Datasets .npz (generado)
 │   └── partial_project_version/  # Código archivado del proyecto parcial
@@ -145,6 +147,9 @@ STAGE=buf DATA_SIZE=20000 IT=1 mpirun --oversubscribe -n 8 python src/knn_parale
 
 # Memoria compartida (OMP), 4 hilos
 THREADS=4 DATA_SIZE=20000 IT=1 python src/knn_omp.py
+
+# Estrategia RIVAL: paralelizar TRAIN (particiona X_train, reduce candidatos)
+DATA_SIZE=20000 IT=1 mpirun -n 4 python src/knn_train_parallel.py
 ```
 
 Variables: `STAGE ∈ {loop, vec, buf}`, `DATA_SIZE ∈ {1797,5000,10000,15000,20000}`, `THREADS` (OMP), `IT` (nº de iteración).
@@ -154,11 +159,11 @@ Variables: `STAGE ∈ {loop, vec, buf}`, `DATA_SIZE ∈ {1797,5000,10000,15000,2
 ```bash
 chmod +x src/run_experiments.sh
 ./src/run_experiments.sh              # MPI (3 etapas) + OMP, todos los p y n, 5 iters
-ONLY=omp ./src/run_experiments.sh     # solo OMP     (o ONLY=mpi)
+ONLY=omp ./src/run_experiments.sh     # solo OMP   (o ONLY=mpi, ONLY=train)
 FORCE=1  ./src/run_experiments.sh     # re-corre todo (ignora resume)
 ```
 
-Genera `src/results_mpi.csv` (300 filas) y `src/results_omp.csv` (100 filas).
+Genera `src/results_mpi.csv` (300), `src/results_train.csv` (100) y `src/results_omp.csv` (100 filas).
 **Resume automático**: al re-ejecutar, omite las combinaciones ya presentes en el CSV.
 
 ### 4. Generar figuras / analizar
@@ -233,10 +238,26 @@ La invarianza en `p` valida que la paralelización es matemáticamente equivalen
 - **Brent** (sin comunicación): `n ∝ √p`
 - **Isoeficiencia** (con comunicación `log p`): `n ∝ p·log p`
 
+### TEST vs TRAIN — ¿prueba, no afirmación?
+
+Se implementó la estrategia rival (`knn_train_parallel.py`, particiona `X_train`).
+Ambas hacen el **mismo trabajo** y dan la **misma accuracy**; solo cambia el overhead
+de coordinación (mediana, `n=20000`):
+
+| p | Overhead TEST | Overhead TRAIN | TRAIN/TEST |
+|---|---|---|---|
+| 1 | 0.69 ms | 13.5 ms | 19.5× |
+| 4 | 11.1 ms | 28.2 ms | 2.5× |
+| 8 | 186.8 ms | 1058.1 ms | 5.7× |
+
+En un nodo el tiempo total es equivalente (*compute-bound*), pero TRAIN paga **2.5–19×
+más overhead** y crece con `p`. TRAIN solo se justifica en **clúster** cuando `X_train`
+no cabe en memoria. Detalle completo en [`docs/JUSTIFICACION-TRAIN-TEST.md`](docs/JUSTIFICACION-TRAIN-TEST.md).
+
 ---
 
 ## 📚 Documentación
 
 | Documento | Contenido |
 |---|---|
-| `Proyecto_Final_Paralela/main.tex` | Informe final IEEE |
+| `MANUSCRIPT_Proyecto_Final_Paralela.pdf` | Informe final IEEE |

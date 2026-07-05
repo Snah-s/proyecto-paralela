@@ -38,6 +38,15 @@ omp = pd.read_csv(os.path.join(ROOT, "src/results_omp.csv"))
 df  = pd.concat([mpi, omp], ignore_index=True)
 med = df.groupby(["paradigm", "stage", "n", "p"]).median(numeric_only=True).reset_index()
 
+# TRAIN-parallel (estrategia rival): CSV propio con columna extra t_merge
+_train_path = os.path.join(ROOT, "src/results_train.csv")
+tr = pd.read_csv(_train_path) if os.path.isfile(_train_path) else None
+tmed = tr.groupby(["n", "p"]).median(numeric_only=True).reset_index() if tr is not None else None
+
+def get_train(n, col):
+    s = tmed[tmed.n == n].sort_values("p")
+    return s.p.values, s[col].values
+
 def get(paradigm, stage, n, col):
     s = med[(med.paradigm==paradigm)&(med.stage==stage)&(med.n==n)].sort_values("p")
     return s.p.values, s[col].values
@@ -156,10 +165,38 @@ def fig_mpi_vs_omp():
     a2.set_ylabel("GFLOP/s"); a2.set_title("Rendimiento: MPI vs OMP")
     a1.legend(fontsize=6.5); fig.tight_layout(); save(fig, "fig_mpi_vs_omp.pdf")
 
+# ── FIG 8: TEST-parallel vs TRAIN-parallel (prueba empírica) ─────────────────
+def fig_test_vs_train():
+    if tmed is None:
+        print("  (results_train.csv ausente: se omite fig_test_vs_train)"); return None
+    n = 20000
+    p_te, comm_te = get("mpi", "buf", n, "t_comm")          # TEST: solo comm
+    _,    tot_te  = get("mpi", "buf", n, "t_total")
+    p_tr, comm_tr = get_train(n, "t_comm")
+    _,    merg_tr = get_train(n, "t_merge")
+    _,    tot_tr  = get_train(n, "t_total")
+    over_te = comm_te                                        # TEST no fusiona
+    over_tr = comm_tr + merg_tr                              # TRAIN: comm + fusión
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.0, 3.0))
+    # (a) overhead absoluto (ms), escala log
+    a1.plot(p_te, over_te*1e3, "o-",  color="#1b9e77", ms=5, label="TEST (paraleliza test)")
+    a1.plot(p_tr, over_tr*1e3, "s--", color="#d95f02", ms=5, label="TRAIN (paraleliza train)")
+    a1.set_yscale("log"); a1.set_ylabel("overhead comm+fusión (ms)")
+    a1.set_title("Overhead de la estrategia (n=20000)")
+    # (b) overhead como % del tiempo total
+    a2.plot(p_te, 100*over_te/tot_te, "o-",  color="#1b9e77", ms=5, label="TEST")
+    a2.plot(p_tr, 100*over_tr/tot_tr, "s--", color="#d95f02", ms=5, label="TRAIN")
+    a2.set_ylabel("overhead / T_total (%)"); a2.set_title("Peso del overhead")
+    for ax in (a1, a2):
+        mark_hardware(ax); ax.set_xticks(PS); ax.set_xlabel("procesos p")
+    a1.legend(fontsize=6.5); fig.tight_layout(); save(fig, "fig_test_vs_train.pdf")
+    return p_tr, over_te, over_tr, tot_te, tot_tr
+
 if __name__ == "__main__":
     print("Generando figuras en", FIG_DIR)
     fig_speedup(); fig_flops(); fig_comm(); a,b,ps = fig_popt()
-    fig_escalabilidad(); fig_stages(); fig_mpi_vs_omp()
+    fig_escalabilidad(); fig_stages(); fig_mpi_vs_omp(); tt = fig_test_vs_train()
 
     # ── Resumen numérico para las tablas del informe ─────────────────────────
     print("\n=== TABLA speedup/eficiencia (buf) ===")
@@ -179,3 +216,14 @@ if __name__ == "__main__":
     print("\n=== GFLOP/s peak ===")
     print(f"  MPI buf n=20000 p=8: {get('mpi','buf',20000,'flops_per_sec')[1][-1]/1e9:.2f}")
     print(f"  OMP     n=20000 t=8: {get('omp','numba',20000,'flops_per_sec')[1][-1]/1e9:.2f}")
+
+    if tmed is not None:
+        print("\n=== TEST-parallel vs TRAIN-parallel (n=20000) ===")
+        p_te, c_te = get("mpi","buf",20000,"t_comm");  _, t_te = get("mpi","buf",20000,"t_total")
+        p_tr, c_tr = get_train(20000,"t_comm");        _, m_tr = get_train(20000,"t_merge")
+        _,   t_tr  = get_train(20000,"t_total")
+        print("  p | TEST over(ms) | TRAIN over(ms) | ratio | TEST S | TRAIN S")
+        for i,pp in enumerate(p_te):
+            ov_te = c_te[i]; ov_tr = c_tr[i]+m_tr[i]
+            print(f"  {int(pp)} | {ov_te*1e3:11.2f} | {ov_tr*1e3:12.2f} | {ov_tr/ov_te:5.1f}x |"
+                  f" {t_te[0]/t_te[i]:5.2f} | {t_tr[0]/t_tr[i]:5.2f}")

@@ -1,4 +1,4 @@
-*.pdf
+
 *.png
 *.jpg
 *.jpeg
@@ -19,3 +19,4 @@ __pycache__/
 Proyecto___Computación_Paralela/
 Proyecto_Final_Paralela/
 docs/
+lectures/
